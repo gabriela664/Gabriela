@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "D-DIN", "Montserrat", sans-serif;
+  
+  --color-reque-primary: var(--reque-primary, #190c59);
+  --color-reque-secondary: var(--reque-secondary, #1a067c);
+  --color-reque-accent: var(--reque-accent, #ec9d23);
+  --color-reque-dark: var(--reque-dark, #1a1c1e);
+}
+
+@layer base {
+  body {
+    @apply font-sans text-reque-dark bg-white;
+  }
+  
+  h1, h2, h3, h4, h5, h6, .font-display {
+    @apply font-bold tracking-tight uppercase;
+    font-family: "D-DIN", "Montserrat", sans-serif;
+  }
+}
+
+/* Custom D-DIN fallback if not available via Google Fonts (D-DIN is often local/custom) */
+/* For this demo, we'll use Montserrat as a strong base and simulate D-DIN with bold tracking if needed */
+
+@media print {
+  header, footer, button, .no-print, .fixed {
+    display: none !important;
+  }
+  
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  
+  .print-only {
+    display: block !important;
+  }
+  
+  .bg-gray-50, .bg-reque-primary {
+    background: transparent !important;
+    color: black !important;
+    border: 1px solid #eee !important;
+  }
+  
+  .text-white {
+    color: black !important;
+  }
+}
