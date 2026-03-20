@@ -144,18 +144,44 @@ const Footer = ({ layout }: { layout: Layout | null }) => (
 // --- Main App ---
 
 export default function App() {
-  const [view, setView] = useState<'public' | 'admin-login' | 'admin-dashboard'>('public');
-  const [adminTab, setAdminTab] = useState<'requests' | 'campaigns' | 'layout'>('requests');
-  const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
+  const [view, setView] = useState<'public' | 'admin-login' | 'admin-dashboard'>(() => {
+    const saved = localStorage.getItem('reque_view');
+    return (saved as any) || 'public';
+  });
+  const [adminTab, setAdminTab] = useState<'requests' | 'campaigns' | 'layout'>(() => {
+    const saved = localStorage.getItem('reque_adminTab');
+    return (saved as any) || 'requests';
+  });
+  const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>(() => {
+    const saved = localStorage.getItem('reque_selectedCampaigns');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [requests, setRequests] = useState<LeadRequest[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [layout, setLayout] = useState<Layout | null>(null);
   const [activeRequest, setActiveRequest] = useState<LeadRequest | null>(null);
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null);
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(() => localStorage.getItem('reque_isFormOpen') === 'true');
   const [isSuccess, setIsSuccess] = useState(false);
   const [filter, setFilter] = useState<'Todos' | 'Calendário' | 'Complementar'>('Todos');
   const [loading, setLoading] = useState(true);
+
+  // Persistence Effects
+  useEffect(() => {
+    localStorage.setItem('reque_view', view);
+  }, [view]);
+
+  useEffect(() => {
+    localStorage.setItem('reque_adminTab', adminTab);
+  }, [adminTab]);
+
+  useEffect(() => {
+    localStorage.setItem('reque_selectedCampaigns', JSON.stringify(selectedCampaigns));
+  }, [selectedCampaigns]);
+
+  useEffect(() => {
+    localStorage.setItem('reque_isFormOpen', isFormOpen.toString());
+  }, [isFormOpen]);
   
   // Fetch data from API
   const fetchData = useCallback(async () => {
@@ -240,6 +266,8 @@ export default function App() {
       setRequests(prev => [savedRequest, ...prev]);
       setIsSuccess(true);
       setSelectedCampaigns([]);
+      // Clear form draft on success
+      localStorage.removeItem('reque_lead_form');
     } catch (err) {
       console.error('Error submitting lead:', err);
       alert('Erro ao enviar solicitação. Tente novamente.');
@@ -287,11 +315,11 @@ export default function App() {
       price: formData.get('price') ? Number(formData.get('price')) : undefined,
       benefits: (formData.get('benefits') as string).split('\n').filter(b => b.trim()),
       category: formData.get('category') as any,
-      active: true
+      active: activeCampaign?.active ?? true
     };
 
     try {
-      if (activeCampaign) {
+      if (activeCampaign && activeCampaign.id) {
         const res = await fetch(`/api/campaigns/${activeCampaign.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -308,9 +336,12 @@ export default function App() {
         const saved = await res.json();
         setCampaigns(prev => [...prev, saved]);
       }
+      localStorage.removeItem(`reque_campaign_draft_${activeCampaign?.id || 'new'}`);
+      alert('Campanha salva com sucesso!');
       setActiveCampaign(null);
     } catch (err) {
       console.error('Error saving campaign:', err);
+      alert('Erro ao salvar a campanha. Verifique os dados e tente novamente.');
     }
   };
 
@@ -587,58 +618,75 @@ export default function App() {
                     })}
                   </div>
 
-                  <form onSubmit={handleSubmitLead} className="space-y-8">
+                  <form 
+                    onSubmit={handleSubmitLead} 
+                    className="space-y-8"
+                    onChange={(e) => {
+                      const form = e.currentTarget;
+                      const data = {
+                        companyName: (form.elements.namedItem('companyName') as HTMLInputElement).value,
+                        responsible: (form.elements.namedItem('responsible') as HTMLInputElement).value,
+                        email: (form.elements.namedItem('email') as HTMLInputElement).value,
+                        phone: (form.elements.namedItem('phone') as HTMLInputElement).value,
+                        employeeCount: (form.elements.namedItem('employeeCount') as HTMLInputElement).value,
+                        city: (form.elements.namedItem('city') as HTMLInputElement).value,
+                        state: (form.elements.namedItem('state') as HTMLInputElement).value,
+                        notes: (form.elements.namedItem('notes') as HTMLTextAreaElement).value,
+                      };
+                      localStorage.setItem('reque_lead_form', JSON.stringify(data));
+                    }}
+                  >
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">Empresa</label>
                         <div className="relative">
                           <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300" />
-                          <input required name="companyName" type="text" placeholder="Nome da empresa" className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-reque-accent transition-all" />
+                          <input required name="companyName" type="text" placeholder="Nome da empresa" defaultValue={JSON.parse(localStorage.getItem('reque_lead_form') || '{}').companyName || ''} className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-reque-accent transition-all" />
                         </div>
                       </div>
                       <div className="space-y-2">
                         <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">Responsável</label>
                         <div className="relative">
                           <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300" />
-                          <input required name="responsible" type="text" placeholder="Nome do responsável" className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-reque-accent transition-all" />
+                          <input required name="responsible" type="text" placeholder="Nome do responsável" defaultValue={JSON.parse(localStorage.getItem('reque_lead_form') || '{}').responsible || ''} className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-reque-accent transition-all" />
                         </div>
                       </div>
                       <div className="space-y-2">
                         <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">E-mail Corporativo</label>
                         <div className="relative">
                           <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300" />
-                          <input required name="email" type="email" placeholder="email@empresa.com.br" className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-reque-accent transition-all" />
+                          <input required name="email" type="email" placeholder="email@empresa.com.br" defaultValue={JSON.parse(localStorage.getItem('reque_lead_form') || '{}').email || ''} className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-reque-accent transition-all" />
                         </div>
                       </div>
                       <div className="space-y-2">
                         <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">Telefone / WhatsApp</label>
                         <div className="relative">
                           <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300" />
-                          <input required name="phone" type="tel" placeholder="(00) 00000-0000" className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-reque-accent transition-all" />
+                          <input required name="phone" type="tel" placeholder="(00) 00000-0000" defaultValue={JSON.parse(localStorage.getItem('reque_lead_form') || '{}').phone || ''} className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-reque-accent transition-all" />
                         </div>
                       </div>
                       <div className="space-y-2">
                         <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">Nº de Colaboradores</label>
                         <div className="relative">
                           <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300" />
-                          <input required name="employeeCount" type="number" placeholder="Ex: 50" className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-reque-accent transition-all" />
+                          <input required name="employeeCount" type="number" placeholder="Ex: 50" defaultValue={JSON.parse(localStorage.getItem('reque_lead_form') || '{}').employeeCount || ''} className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-reque-accent transition-all" />
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">Cidade</label>
-                          <input required name="city" type="text" placeholder="Cidade" className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-reque-accent transition-all" />
+                          <input required name="city" type="text" placeholder="Cidade" defaultValue={JSON.parse(localStorage.getItem('reque_lead_form') || '{}').city || ''} className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-reque-accent transition-all" />
                         </div>
                         <div className="space-y-2">
                           <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">UF</label>
-                          <input required name="state" type="text" maxLength={2} placeholder="UF" className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-reque-accent transition-all" />
+                          <input required name="state" type="text" maxLength={2} placeholder="UF" defaultValue={JSON.parse(localStorage.getItem('reque_lead_form') || '{}').state || ''} className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-reque-accent transition-all" />
                         </div>
                       </div>
                     </div>
                     
                     <div className="space-y-2">
                       <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">Observações Adicionais</label>
-                      <textarea name="notes" rows={4} placeholder="Conte-nos um pouco mais sobre sua necessidade..." className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-reque-accent transition-all resize-none" />
+                      <textarea name="notes" rows={4} placeholder="Conte-nos um pouco mais sobre sua necessidade..." defaultValue={JSON.parse(localStorage.getItem('reque_lead_form') || '{}').notes || ''} className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-reque-accent transition-all resize-none" />
                     </div>
 
                     <button 
@@ -696,7 +744,19 @@ export default function App() {
   };
 
   const LayoutEditor = ({ layout, onSave }: { layout: Layout; onSave: (l: Layout) => void }) => {
-    const [localLayout, setLocalLayout] = useState<Layout>(layout);
+    const [localLayout, setLocalLayout] = useState<Layout>(() => {
+      const saved = localStorage.getItem('reque_layout_draft');
+      return saved ? JSON.parse(saved) : layout;
+    });
+
+    useEffect(() => {
+      localStorage.setItem('reque_layout_draft', JSON.stringify(localLayout));
+    }, [localLayout]);
+
+    const handleSaveLayout = () => {
+      onSave(localLayout);
+      localStorage.removeItem('reque_layout_draft');
+    };
 
     const handleChange = (section: keyof Layout, field: string, value: string) => {
       setLocalLayout(prev => ({
@@ -713,7 +773,7 @@ export default function App() {
         <div className="flex justify-between items-center">
           <h3 className="text-2xl font-bold">Alteração do Layout</h3>
           <button 
-            onClick={() => onSave(localLayout)}
+            onClick={handleSaveLayout}
             className="bg-reque-accent text-reque-primary px-8 py-3 rounded-xl font-bold hover:scale-105 transition-transform shadow-lg"
           >
             Salvar Alterações
@@ -1128,45 +1188,62 @@ export default function App() {
                   </button>
                 </div>
 
-                <form onSubmit={handleSaveCampaign} className="space-y-6">
+                <form 
+                  onSubmit={handleSaveCampaign} 
+                  className="space-y-6"
+                  onChange={(e) => {
+                    const form = e.currentTarget;
+                    const data = {
+                      ...activeCampaign,
+                      name: (form.elements.namedItem('name') as HTMLInputElement).value,
+                      month: (form.elements.namedItem('month') as HTMLInputElement).value,
+                      imageUrl: (form.elements.namedItem('imageUrl') as HTMLInputElement).value,
+                      category: (form.elements.namedItem('category') as HTMLSelectElement).value,
+                      price: Number((form.elements.namedItem('price') as HTMLInputElement).value),
+                      description: (form.elements.namedItem('description') as HTMLTextAreaElement).value,
+                      benefits: (form.elements.namedItem('benefits') as HTMLTextAreaElement).value.split('\n').filter(b => b.trim()),
+                    };
+                    localStorage.setItem(`reque_campaign_draft_${activeCampaign.id || 'new'}`, JSON.stringify(data));
+                  }}
+                >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">Nome da Campanha</label>
-                      <input required name="name" defaultValue={activeCampaign.name} className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-reque-accent" />
+                      <input required name="name" defaultValue={JSON.parse(localStorage.getItem(`reque_campaign_draft_${activeCampaign.id || 'new'}`) || '{}').name || activeCampaign.name} className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-reque-accent" />
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">Mês (Opcional)</label>
-                      <input name="month" defaultValue={activeCampaign.month} className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-reque-accent" />
+                      <input name="month" defaultValue={JSON.parse(localStorage.getItem(`reque_campaign_draft_${activeCampaign.id || 'new'}`) || '{}').month || activeCampaign.month} className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-reque-accent" />
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">URL da Imagem de Capa</label>
-                    <input name="imageUrl" defaultValue={activeCampaign.imageUrl} placeholder="https://exemplo.com/imagem.jpg" className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-reque-accent" />
+                    <input name="imageUrl" defaultValue={JSON.parse(localStorage.getItem(`reque_campaign_draft_${activeCampaign.id || 'new'}`) || '{}').imageUrl || activeCampaign.imageUrl} placeholder="https://exemplo.com/imagem.jpg" className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-reque-accent" />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">Categoria</label>
-                      <select name="category" defaultValue={activeCampaign.category} className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-reque-accent">
+                      <select name="category" defaultValue={JSON.parse(localStorage.getItem(`reque_campaign_draft_${activeCampaign.id || 'new'}`) || '{}').category || activeCampaign.category} className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-reque-accent">
                         <option value="Calendário">Calendário</option>
                         <option value="Complementar">Complementar</option>
                       </select>
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">Valor (Opcional)</label>
-                      <input name="price" type="number" step="0.01" defaultValue={activeCampaign.price} placeholder="Ex: 1500.00" className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-reque-accent" />
+                      <input name="price" type="number" step="0.01" defaultValue={JSON.parse(localStorage.getItem(`reque_campaign_draft_${activeCampaign.id || 'new'}`) || '{}').price || activeCampaign.price} placeholder="Ex: 1500.00" className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-reque-accent" />
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">Descrição</label>
-                    <textarea name="description" rows={3} defaultValue={activeCampaign.description} className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-reque-accent resize-none" />
+                    <textarea name="description" rows={3} defaultValue={JSON.parse(localStorage.getItem(`reque_campaign_draft_${activeCampaign.id || 'new'}`) || '{}').description || activeCampaign.description} className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-reque-accent resize-none" />
                   </div>
 
                   <div className="space-y-2">
                     <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">Benefícios (um por linha)</label>
-                    <textarea name="benefits" rows={4} defaultValue={activeCampaign.benefits.join('\n')} className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-reque-accent resize-none" />
+                    <textarea name="benefits" rows={4} defaultValue={(JSON.parse(localStorage.getItem(`reque_campaign_draft_${activeCampaign.id || 'new'}`) || '{}').benefits || activeCampaign.benefits).join('\n')} className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-reque-accent resize-none" />
                   </div>
 
                   <button type="submit" className="w-full bg-reque-accent text-reque-primary py-4 rounded-2xl font-bold text-lg hover:scale-[1.02] transition-transform shadow-lg">
@@ -1325,10 +1402,18 @@ export default function App() {
     onClose: () => void; 
     onSave: (updated: LeadRequest) => Promise<void>; 
   }) => {
-    const [tempRequest, setTempRequest] = useState<LeadRequest>({
-      ...request,
-      budget: request.budget || { items: [], extras: [], discount: 0, proposal: '' }
+    const [tempRequest, setTempRequest] = useState<LeadRequest>(() => {
+      const saved = localStorage.getItem(`reque_request_draft_${request.id}`);
+      return saved ? JSON.parse(saved) : {
+        ...request,
+        budget: request.budget || { items: [], extras: [], discount: 0, proposal: '' }
+      };
     });
+
+    useEffect(() => {
+      localStorage.setItem(`reque_request_draft_${request.id}`, JSON.stringify(tempRequest));
+    }, [tempRequest, request.id]);
+
     const [isSaving, setIsSaving] = useState(false);
     const [showCampaignSelector, setShowCampaignSelector] = useState(false);
 
@@ -1336,6 +1421,7 @@ export default function App() {
       setIsSaving(true);
       try {
         await onSave(tempRequest);
+        localStorage.removeItem(`reque_request_draft_${request.id}`);
         alert('Informações e orçamento salvos com sucesso!');
       } catch (err) {
         console.error('Error saving request:', err);
