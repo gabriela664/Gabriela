@@ -25,7 +25,9 @@ const DEFAULT_LAYOUT = {
   },
   catalog: {
     title: "Catálogo de Campanhas",
-    subtitle: "Selecione uma ou mais campanhas para receber um orçamento personalizado."
+    subtitle: "Selecione uma ou mais campanhas para receber um orçamento personalizado.",
+    buttonText: "Selecionar",
+    buttonSelectedText: "Selecionado"
   },
   footer: {
     email: "contato@requesst.com.br",

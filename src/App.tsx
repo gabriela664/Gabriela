@@ -165,6 +165,12 @@ export default function App() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [filter, setFilter] = useState<'Todos' | 'Calendário' | 'Complementar'>('Todos');
   const [loading, setLoading] = useState(true);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showNotification = (message: string, type: 'success' | 'error') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
 
   // Persistence Effects
   useEffect(() => {
@@ -270,7 +276,7 @@ export default function App() {
       localStorage.removeItem('reque_lead_form');
     } catch (err) {
       console.error('Error submitting lead:', err);
-      alert('Erro ao enviar solicitação. Tente novamente.');
+      showNotification('Erro ao enviar solicitação. Tente novamente.', 'error');
     }
   };
 
@@ -334,14 +340,14 @@ export default function App() {
           body: JSON.stringify(campaignData)
         });
         const saved = await res.json();
-        setCampaigns(prev => [...prev, saved]);
+        setCampaigns(prev => [saved, ...prev]);
       }
       localStorage.removeItem(`reque_campaign_draft_${activeCampaign?.id || 'new'}`);
-      alert('Campanha salva com sucesso!');
+      showNotification('Campanha salva com sucesso!', 'success');
       setActiveCampaign(null);
     } catch (err) {
       console.error('Error saving campaign:', err);
-      alert('Erro ao salvar a campanha. Verifique os dados e tente novamente.');
+      showNotification('Erro ao salvar a campanha. Verifique os dados e tente novamente.', 'error');
     }
   };
 
@@ -378,9 +384,10 @@ export default function App() {
       });
       const updated = await res.json();
       setLayout(updated);
-      alert('Layout salvo com sucesso!');
+      showNotification('Layout salvo com sucesso!', 'success');
     } catch (err) {
       console.error('Error saving layout:', err);
+      showNotification('Erro ao salvar o layout.', 'error');
     }
   };
 
@@ -710,7 +717,7 @@ export default function App() {
     const handleLogin = (e: React.FormEvent) => {
       e.preventDefault();
       if (pass === 'RequeMKT') setView('admin-dashboard');
-      else alert('Senha incorreta (Dica: RequeMKT)');
+      else showNotification('Senha incorreta (Dica: RequeMKT)', 'error');
     };
     return (
       <div className="min-h-screen bg-reque-primary flex items-center justify-center p-6">
@@ -1422,10 +1429,10 @@ export default function App() {
       try {
         await onSave(tempRequest);
         localStorage.removeItem(`reque_request_draft_${request.id}`);
-        alert('Informações e orçamento salvos com sucesso!');
+        showNotification('Informações e orçamento salvos com sucesso!', 'success');
       } catch (err) {
         console.error('Error saving request:', err);
-        alert('Erro ao salvar as alterações.');
+        showNotification('Erro ao salvar as alterações.', 'error');
       } finally {
         setIsSaving(false);
       }
@@ -1826,6 +1833,23 @@ export default function App() {
 
   return (
     <div className="font-sans antialiased text-reque-dark">
+      <AnimatePresence>
+        {notification && (
+          <motion.div
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 20 }}
+            exit={{ opacity: 0, y: -50 }}
+            className="fixed top-0 left-0 right-0 z-[200] flex justify-center pointer-events-none"
+          >
+            <div className={`px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 pointer-events-auto ${
+              notification.type === 'success' ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'
+            }`}>
+              {notification.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <Plus className="w-5 h-5 rotate-45" />}
+              <span className="font-bold">{notification.message}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <Header 
         isAdminView={view !== 'public'} 
         onAdminClick={() => {

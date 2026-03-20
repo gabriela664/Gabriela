@@ -47,6 +47,8 @@ export interface Layout {
   catalog: {
     title: string;
     subtitle: string;
+    buttonText: string;
+    buttonSelectedText: string;
   };
   footer: {
     email: string;
