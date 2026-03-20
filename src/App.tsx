@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 import { 
   Shield, 
   CheckCircle2, 
@@ -1274,14 +1276,28 @@ export default function App() {
   );
 };
 
-  const ProposalPrint = ({ request, campaigns }: { request: LeadRequest, campaigns: Campaign[] }) => {
+  const ProposalPrint = React.forwardRef(({ request, campaigns }: { request: LeadRequest, campaigns: Campaign[] }, ref: React.Ref<HTMLDivElement>) => {
     const total = ((request.budget?.items.reduce((acc, i) => acc + i.value, 0) || 0) +
                   (request.budget?.extras.reduce((acc, i) => acc + i.value, 0) || 0)) -
                   (request.budget?.discount || 0);
     
+    // Standard Hex Colors for html2canvas compatibility
+    const colors = {
+      primary: '#190c59',
+      accent: '#ec9d23',
+      gray50: '#f9fafb',
+      gray100: '#f3f4f6',
+      gray400: '#9ca3af',
+      gray500: '#6b7280',
+      gray600: '#4b5563',
+      red500: '#ef4444',
+      white: '#ffffff',
+      black: '#000000'
+    };
+
     return (
-      <div className="hidden print:block p-12 bg-white text-black font-sans">
-        <div className="flex justify-between items-start border-b-4 border-reque-primary pb-8 mb-12">
+      <div ref={ref} className="hidden print:block p-12 font-sans" style={{ width: '800px', backgroundColor: colors.white, color: colors.black }}>
+        <div className="flex justify-between items-start pb-8 mb-12" style={{ borderBottom: `4px solid ${colors.primary}` }}>
           <div>
             <div className="flex items-center mb-2">
               <img 
@@ -1291,43 +1307,43 @@ export default function App() {
                 referrerPolicy="no-referrer"
               />
             </div>
-            <p className="text-sm text-gray-500">Saúde e Segurança do Trabalho</p>
+            <p className="text-sm" style={{ color: colors.gray500 }}>Saúde e Segurança do Trabalho</p>
           </div>
           <div className="text-right">
-            <h1 className="text-2xl font-bold text-reque-primary mb-1">Proposta Comercial</h1>
-            <p className="text-sm text-gray-500">#{request.id.toUpperCase()}</p>
-            <p className="text-sm text-gray-500">{new Date().toLocaleDateString('pt-BR')}</p>
+            <h1 className="text-2xl font-bold mb-1" style={{ color: colors.primary }}>Proposta Comercial</h1>
+            <p className="text-sm" style={{ color: colors.gray500 }}>#{request.id.toUpperCase()}</p>
+            <p className="text-sm" style={{ color: colors.gray500 }}>{new Date().toLocaleDateString('pt-BR')}</p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-12 mb-12">
           <div>
-            <h2 className="text-xs font-bold uppercase tracking-widest text-reque-accent mb-4">Dados do Cliente</h2>
+            <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: colors.accent }}>Dados do Cliente</h2>
             <div className="space-y-1">
               <p className="font-bold text-lg">{request.companyName}</p>
-              <p className="text-sm text-gray-600">A/C: {request.responsible}</p>
-              <p className="text-sm text-gray-600">{request.email}</p>
-              <p className="text-sm text-gray-600">{request.phone}</p>
-              <p className="text-sm text-gray-600">{request.city} - {request.state}</p>
+              <p className="text-sm" style={{ color: colors.gray600 }}>A/C: {request.responsible}</p>
+              <p className="text-sm" style={{ color: colors.gray600 }}>{request.email}</p>
+              <p className="text-sm" style={{ color: colors.gray600 }}>{request.phone}</p>
+              <p className="text-sm" style={{ color: colors.gray600 }}>{request.city} - {request.state}</p>
             </div>
           </div>
           <div>
-            <h2 className="text-xs font-bold uppercase tracking-widest text-reque-accent mb-4">Dados do Proponente</h2>
+            <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: colors.accent }}>Dados do Proponente</h2>
             <div className="space-y-1">
               <p className="font-bold text-lg">Reque SST</p>
-              <p className="text-sm text-gray-600">CNPJ: 45.678.901/0001-23</p>
-              <p className="text-sm text-gray-600">contato@requesst.com.br</p>
-              <p className="text-sm text-gray-600">(42) 3026-4999</p>
-              <p className="text-sm text-gray-600">Ponta Grossa, PR</p>
+              <p className="text-sm" style={{ color: colors.gray600 }}>CNPJ: 45.678.901/0001-23</p>
+              <p className="text-sm" style={{ color: colors.gray600 }}>contato@requesst.com.br</p>
+              <p className="text-sm" style={{ color: colors.gray600 }}>(42) 3026-4999</p>
+              <p className="text-sm" style={{ color: colors.gray600 }}>Ponta Grossa, PR</p>
             </div>
           </div>
         </div>
 
         <div className="mb-12">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-reque-accent mb-4">Escopo da Proposta</h2>
+          <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: colors.accent }}>Escopo da Proposta</h2>
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b-2 border-reque-primary">
+              <tr style={{ borderBottom: `2px solid ${colors.primary}` }}>
                 <th className="py-3 text-sm font-bold uppercase">Item / Campanha</th>
                 <th className="py-3 text-sm font-bold uppercase text-right">Valor</th>
               </tr>
@@ -1338,12 +1354,12 @@ export default function App() {
                 const budgetItem = request.budget?.items.find(i => i.campaignId === cid);
                 const val = budgetItem?.value || 0;
                 return (
-                  <tr key={cid} className="border-b border-gray-100">
+                  <tr key={cid} style={{ borderBottom: `1px solid ${colors.gray100}` }}>
                     <td className="py-4">
                       <p className="font-bold">{campaign?.name}</p>
-                      <p className="text-xs text-gray-500">{campaign?.description}</p>
+                      <p className="text-xs" style={{ color: colors.gray500 }}>{campaign?.description}</p>
                       {budgetItem?.description && (
-                        <p className="text-xs text-reque-primary mt-1 italic">Obs: {budgetItem.description}</p>
+                        <p className="text-xs mt-1 italic" style={{ color: colors.primary }}>Obs: {budgetItem.description}</p>
                       )}
                     </td>
                     <td className="py-4 text-right font-bold">R$ {val.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
@@ -1351,7 +1367,7 @@ export default function App() {
                 );
               })}
               {request.budget?.extras.map((extra, idx) => (
-                <tr key={idx} className="border-b border-gray-100">
+                <tr key={idx} style={{ borderBottom: `1px solid ${colors.gray100}` }}>
                   <td className="py-4">
                     <p className="font-bold">{extra.description}</p>
                   </td>
@@ -1362,11 +1378,11 @@ export default function App() {
             <tfoot>
               {request.budget?.discount ? (
                 <tr>
-                  <td className="py-4 text-right text-gray-500 font-bold">Desconto:</td>
-                  <td className="py-4 text-right text-red-500 font-bold">- R$ {request.budget.discount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-4 text-right font-bold" style={{ color: colors.gray500 }}>Desconto:</td>
+                  <td className="py-4 text-right font-bold" style={{ color: colors.red500 }}>- R$ {request.budget.discount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                 </tr>
               ) : null}
-              <tr className="bg-reque-primary text-white">
+              <tr style={{ backgroundColor: colors.primary, color: colors.white }}>
                 <td className="py-4 px-4 font-bold text-xl">Investimento Total</td>
                 <td className="py-4 px-4 text-right font-bold text-xl">R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
               </tr>
@@ -1374,29 +1390,45 @@ export default function App() {
           </table>
         </div>
 
-        {request.budget?.proposal && (
-          <div className="mb-12">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-reque-accent mb-4">Informações Adicionais</h2>
-            <div className="bg-gray-50 p-6 rounded-xl border border-gray-100 text-sm leading-relaxed whitespace-pre-wrap">
-              {request.budget.proposal}
-            </div>
+        <div className="mb-12 grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: colors.accent }}>Condições Comerciais</h2>
+            <ul className="text-sm space-y-1" style={{ color: colors.gray600 }}>
+              <li>• Prazo de início: após aprovação</li>
+              <li>• Forma de pagamento: a definir</li>
+              <li>• Validade da proposta: 7 dias</li>
+            </ul>
           </div>
-        )}
-
-        <div className="mt-20 pt-12 border-t border-gray-100 text-center">
-          <p className="text-xs text-gray-400 mb-8">Esta proposta tem validade de 10 dias a partir da data de emissão.</p>
-          <div className="flex justify-around">
-            <div className="w-64 border-t border-black pt-2">
-              <p className="text-xs font-bold uppercase">Reque SST</p>
+          {request.budget?.proposal && (
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: colors.accent }}>Informações Adicionais</h2>
+              <div className="p-4 rounded-xl text-xs leading-relaxed whitespace-pre-wrap" style={{ backgroundColor: colors.gray50, border: `1px solid ${colors.gray100}` }}>
+                {request.budget.proposal}
+              </div>
             </div>
-            <div className="w-64 border-t border-black pt-2">
-              <p className="text-xs font-bold uppercase">{request.companyName}</p>
+          )}
+        </div>
+
+        <div className="mt-20 pt-12" style={{ borderTop: `1px solid ${colors.gray100}` }}>
+          <div className="grid grid-cols-2 gap-20">
+            <div className="text-center">
+              <div className="pt-2" style={{ borderTop: `1px solid ${colors.black}` }}>
+                <p className="text-xs font-bold uppercase">Reque SST</p>
+                <p className="text-[10px] mt-1" style={{ color: colors.gray400 }}>Responsável Técnico</p>
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="pt-2" style={{ borderTop: `1px solid ${colors.black}` }}>
+                <p className="text-xs font-bold uppercase">{request.companyName}</p>
+                <p className="text-[10px] mt-1" style={{ color: colors.gray400 }}>Aprovação / Assinatura</p>
+                <p className="text-[10px] mt-4" style={{ color: colors.gray400 }}>Data: ____/____/_______</p>
+              </div>
             </div>
           </div>
         </div>
       </div>
     );
-  };
+  });
 
   const RequestDetailModal = ({ 
     request, 
@@ -1422,7 +1454,57 @@ export default function App() {
     }, [tempRequest, request.id]);
 
     const [isSaving, setIsSaving] = useState(false);
+    const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
     const [showCampaignSelector, setShowCampaignSelector] = useState(false);
+    const printRef = useRef<HTMLDivElement>(null);
+
+    const handleDownloadPDF = async () => {
+      if (!printRef.current) return;
+      if (tempRequest.selectedCampaigns.length === 0 && (!tempRequest.budget?.extras || tempRequest.budget.extras.length === 0)) {
+        showNotification('Selecione ao menos uma campanha ou serviço extra para gerar o PDF.', 'error');
+        return;
+      }
+
+      setIsGeneratingPDF(true);
+      try {
+        const element = printRef.current;
+        // Temporarily modify styles for capture
+        const originalDisplay = element.style.display;
+        const originalPosition = element.style.position;
+        const originalLeft = element.style.left;
+        
+        element.style.display = 'block';
+        element.style.position = 'fixed';
+        element.style.left = '-9999px';
+
+        const canvas = await html2canvas(element, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff'
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save(`Proposta_${tempRequest.companyName.replace(/\s+/g, '_')}.pdf`);
+
+        // Restore styles
+        element.style.display = originalDisplay;
+        element.style.position = originalPosition;
+        element.style.left = originalLeft;
+
+        showNotification('PDF gerado com sucesso!', 'success');
+      } catch (err) {
+        console.error('Error generating PDF:', err);
+        showNotification('Erro ao gerar o PDF.', 'error');
+      } finally {
+        setIsGeneratingPDF(false);
+      }
+    };
 
     const handleSave = async () => {
       setIsSaving(true);
@@ -1818,11 +1900,21 @@ export default function App() {
                   )}
                 </button>
                 <button 
-                  onClick={() => window.print()}
-                  className="bg-reque-primary text-white px-8 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-reque-secondary transition-all shadow-md"
+                  disabled={isSaving || isGeneratingPDF}
+                  onClick={handleDownloadPDF}
+                  className="bg-reque-primary text-white px-8 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-reque-secondary transition-all shadow-md disabled:opacity-50"
                 >
-                  <FileText className="w-5 h-5" /> PDF
+                  {isGeneratingPDF ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <><FileText className="w-5 h-5" /> PDF</>
+                  )}
                 </button>
+              </div>
+
+              {/* Hidden Print Component */}
+              <div className="absolute opacity-0 pointer-events-none overflow-hidden h-0">
+                <ProposalPrint ref={printRef} request={tempRequest} campaigns={campaigns} />
               </div>
             </div>
           </div>
