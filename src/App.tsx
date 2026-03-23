@@ -38,13 +38,34 @@ import {
   Palette,
   Image as ImageIcon,
   Type,
-  Layout as LayoutIcon
+  Layout as LayoutIcon,
+  LogIn
 } from 'lucide-react';
 import { Campaign, LeadRequest, Layout } from './types';
+import { auth, db, handleFirestoreError, OperationType } from './firebase';
+import { 
+  collection, 
+  onSnapshot, 
+  doc, 
+  setDoc, 
+  addDoc, 
+  deleteDoc, 
+  updateDoc, 
+  query, 
+  orderBy,
+  getDoc
+} from 'firebase/firestore';
+import { 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  onAuthStateChanged, 
+  signOut,
+  User as FirebaseUser
+} from 'firebase/auth';
 
 // --- Components ---
 
-const Header = ({ onAdminClick, isAdminView }: { onAdminClick: () => void, isAdminView: boolean }) => (
+const Header = ({ onAdminClick, onLogout, isAdminView, user }: { onAdminClick: () => void, onLogout: () => void, isAdminView: boolean, user: any }) => (
   <header className="bg-reque-primary text-white py-4 px-6 sticky top-0 z-50 shadow-lg">
     <div className="max-w-7xl mx-auto flex justify-between items-center">
       <div className="flex items-center cursor-pointer" onClick={() => window.location.reload()}>
@@ -55,12 +76,29 @@ const Header = ({ onAdminClick, isAdminView }: { onAdminClick: () => void, isAdm
           referrerPolicy="no-referrer"
         />
       </div>
-      <button 
-        onClick={onAdminClick}
-        className="flex items-center gap-2 text-sm font-medium hover:text-reque-accent transition-colors"
-      >
-        {isAdminView ? <><LogOut className="w-4 h-4" /> Sair do Admin</> : <><LayoutDashboard className="w-4 h-4" /> Área Restrita</>}
-      </button>
+      <div className="flex items-center gap-6">
+        {user && (
+          <div className="hidden md:flex items-center gap-3 border-r border-white/10 pr-6">
+            <div className="text-right">
+              <p className="text-[10px] font-bold uppercase text-reque-accent tracking-widest">Acesso</p>
+              <p className="text-xs font-medium text-gray-300">{user.email}</p>
+            </div>
+            {user.photoURL ? (
+              <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full border border-white/20" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-reque-accent text-reque-primary flex items-center justify-center font-bold text-xs uppercase">
+                {user.email?.[0]}
+              </div>
+            )}
+          </div>
+        )}
+        <button 
+          onClick={isAdminView ? onLogout : onAdminClick}
+          className="flex items-center gap-2 text-sm font-medium hover:text-reque-accent transition-colors"
+        >
+          {isAdminView ? <><LogOut className="w-4 h-4" /> Sair do Admin</> : <><LayoutDashboard className="w-4 h-4" /> Área Restrita</>}
+        </button>
+      </div>
     </div>
   </header>
 );
@@ -150,6 +188,9 @@ export default function App() {
     const saved = localStorage.getItem('reque_view');
     return (saved as any) || 'public';
   });
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
   const [adminTab, setAdminTab] = useState<'requests' | 'campaigns' | 'layout'>(() => {
     const saved = localStorage.getItem('reque_adminTab');
     return (saved as any) || 'requests';
@@ -174,6 +215,75 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  const handleAdminLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Bootstrap first admin
+      if (user.email === 'gabriela@reque.com.br') {
+        await setDoc(doc(db, 'users', user.uid), {
+          uid: user.uid,
+          email: user.email,
+          role: 'admin',
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+          createdAt: new Date().toISOString()
+        }, { merge: true });
+      }
+
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists() && userDoc.data().role === 'admin') {
+        setIsAdmin(true);
+        setView('admin-dashboard');
+        showNotification('Login realizado com sucesso!', 'success');
+      } else {
+        showNotification('Acesso negado. Você não é um administrador.', 'error');
+      }
+    } catch (error) {
+      console.error('Erro ao fazer login:', error);
+      showNotification('Erro ao fazer login com Google.', 'error');
+    }
+  };
+
+  const handleAdminLogout = async () => {
+    try {
+      await signOut(auth);
+      setIsAdmin(false);
+      setUser(null);
+      setView('public');
+      showNotification('Logout realizado com sucesso!', 'success');
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+    }
+  };
+
+  // Auth State Listener
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      try {
+        if (firebaseUser) {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          if (userDoc.exists() && userDoc.data().role === 'admin') {
+            setIsAdmin(true);
+          } else {
+            setIsAdmin(false);
+          }
+        } else {
+          setIsAdmin(false);
+        }
+      } catch (err) {
+        console.error("Auth check error:", err);
+        setIsAdmin(false);
+      } finally {
+        setAuthLoading(false);
+      }
+    });
+    return () => unsub();
+  }, []);
+
   // Persistence Effects
   useEffect(() => {
     localStorage.setItem('reque_view', view);
@@ -191,31 +301,40 @@ export default function App() {
     localStorage.setItem('reque_isFormOpen', isFormOpen.toString());
   }, [isFormOpen]);
   
-  // Fetch data from API
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [cRes, rRes, lRes] = await Promise.all([
-        fetch('/api/campaigns'),
-        fetch('/api/requests'),
-        fetch('/api/layout')
-      ]);
-      const cData = await cRes.json();
-      const rData = await rRes.json();
-      const lData = await lRes.json();
-      setCampaigns(cData);
-      setRequests(rData);
-      setLayout(lData);
-    } catch (err) {
-      console.error('Error fetching data:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Fetch data from Firestore
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    const qCampaigns = query(collection(db, 'campaigns'), orderBy('name'));
+    const unsubCampaigns = onSnapshot(qCampaigns, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Campaign));
+      setCampaigns(data);
+      setLoading(false);
+    }, (error) => {
+      console.error("Campaigns fetch error:", error);
+      setLoading(false);
+      // We don't throw here to avoid crashing the app, just log it
+    });
+
+    const unsubLayout = onSnapshot(doc(db, 'layout', 'settings'), (docSnap) => {
+      if (docSnap.exists()) {
+        setLayout(docSnap.data() as Layout);
+      }
+    }, (error) => handleFirestoreError(error, OperationType.GET, 'layout/settings'));
+
+    let unsubRequests = () => {};
+    if (isAdmin) {
+      const qRequests = query(collection(db, 'requests'), orderBy('createdAt', 'desc'));
+      unsubRequests = onSnapshot(qRequests, (snapshot) => {
+        const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as LeadRequest));
+        setRequests(data);
+      }, (error) => handleFirestoreError(error, OperationType.LIST, 'requests'));
+    }
+
+    return () => {
+      unsubCampaigns();
+      unsubLayout();
+      unsubRequests();
+    };
+  }, [isAdmin]);
 
   useEffect(() => {
     if (layout) {
@@ -228,17 +347,10 @@ export default function App() {
 
   const saveRequest = async (updated: LeadRequest) => {
     try {
-      const res = await fetch(`/api/requests/${updated.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated)
-      });
-      const saved = await res.json();
-      setRequests(prev => prev.map(r => r.id === updated.id ? saved : r));
-      setActiveRequest(saved);
+      await setDoc(doc(db, 'requests', updated.id), updated);
+      setActiveRequest(updated);
     } catch (err) {
-      console.error('Error saving request:', err);
-      throw err;
+      handleFirestoreError(err, OperationType.WRITE, `requests/${updated.id}`);
     }
   };
 
@@ -252,7 +364,9 @@ export default function App() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     
-    const newRequestData = {
+    const id = Math.random().toString(36).substr(2, 9);
+    const newRequestData: LeadRequest = {
+      id,
       companyName: formData.get('companyName') as string,
       responsible: formData.get('responsible') as string,
       phone: formData.get('phone') as string,
@@ -262,60 +376,46 @@ export default function App() {
       state: formData.get('state') as string,
       notes: formData.get('notes') as string,
       selectedCampaigns: selectedCampaigns,
+      status: 'Novo',
+      createdAt: new Date().toISOString()
     };
 
     try {
-      const res = await fetch('/api/requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newRequestData)
-      });
-      const savedRequest = await res.json();
-      setRequests(prev => [savedRequest, ...prev]);
+      await setDoc(doc(db, 'requests', id), newRequestData);
       setIsSuccess(true);
       setSelectedCampaigns([]);
       // Clear form draft on success
       localStorage.removeItem('reque_lead_form');
     } catch (err) {
-      console.error('Error submitting lead:', err);
+      handleFirestoreError(err, OperationType.CREATE, 'requests');
       showNotification('Erro ao enviar solicitação. Tente novamente.', 'error');
     }
   };
 
   const updateRequestStatus = async (id: string, status: LeadRequest['status']) => {
     try {
-      const res = await fetch(`/api/requests/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
-      });
-      const updated = await res.json();
-      setRequests(prev => prev.map(r => r.id === id ? updated : r));
-      if (activeRequest?.id === id) setActiveRequest(updated);
+      await updateDoc(doc(db, 'requests', id), { status });
+      if (activeRequest?.id === id) setActiveRequest(prev => prev ? { ...prev, status } : null);
     } catch (err) {
-      console.error('Error updating status:', err);
+      handleFirestoreError(err, OperationType.UPDATE, `requests/${id}`);
     }
   };
 
   const saveBudget = async (id: string, budget: LeadRequest['budget']) => {
     try {
-      const res = await fetch(`/api/requests/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ budget })
-      });
-      const updated = await res.json();
-      setRequests(prev => prev.map(r => r.id === id ? updated : r));
-      if (activeRequest?.id === id) setActiveRequest(updated);
+      await updateDoc(doc(db, 'requests', id), { budget });
+      if (activeRequest?.id === id) setActiveRequest(prev => prev ? { ...prev, budget } : null);
     } catch (err) {
-      console.error('Error saving budget:', err);
+      handleFirestoreError(err, OperationType.UPDATE, `requests/${id}`);
     }
   };
 
   const handleSaveCampaign = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+    const id = activeCampaign?.id || Math.random().toString(36).substr(2, 9);
     const campaignData = {
+      id,
       name: formData.get('name') as string,
       month: formData.get('month') as string,
       description: formData.get('description') as string,
@@ -327,68 +427,39 @@ export default function App() {
     };
 
     try {
-      if (activeCampaign && activeCampaign.id) {
-        const res = await fetch(`/api/campaigns/${activeCampaign.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(campaignData)
-        });
-        const updated = await res.json();
-        setCampaigns(prev => prev.map(c => c.id === activeCampaign.id ? updated : c));
-      } else {
-        const res = await fetch('/api/campaigns', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(campaignData)
-        });
-        const saved = await res.json();
-        setCampaigns(prev => [saved, ...prev]);
-      }
+      await setDoc(doc(db, 'campaigns', id), campaignData);
       localStorage.removeItem(`reque_campaign_draft_${activeCampaign?.id || 'new'}`);
       showNotification('Campanha salva com sucesso!', 'success');
       setActiveCampaign(null);
     } catch (err) {
-      console.error('Error saving campaign:', err);
+      handleFirestoreError(err, OperationType.WRITE, `campaigns/${id}`);
       showNotification('Erro ao salvar a campanha. Verifique os dados e tente novamente.', 'error');
     }
   };
 
   const toggleCampaignActive = async (campaign: Campaign) => {
     try {
-      const res = await fetch(`/api/campaigns/${campaign.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: !campaign.active })
-      });
-      const updated = await res.json();
-      setCampaigns(prev => prev.map(c => c.id === campaign.id ? updated : c));
+      await updateDoc(doc(db, 'campaigns', campaign.id), { active: !campaign.active });
     } catch (err) {
-      console.error('Error toggling campaign:', err);
+      handleFirestoreError(err, OperationType.UPDATE, `campaigns/${campaign.id}`);
     }
   };
 
   const deleteCampaign = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir esta campanha?')) return;
     try {
-      await fetch(`/api/campaigns/${id}`, { method: 'DELETE' });
-      setCampaigns(prev => prev.filter(c => c.id !== id));
+      await deleteDoc(doc(db, 'campaigns', id));
     } catch (err) {
-      console.error('Error deleting campaign:', err);
+      handleFirestoreError(err, OperationType.DELETE, `campaigns/${id}`);
     }
   };
 
   const saveLayout = async (newLayout: Layout) => {
     try {
-      const res = await fetch('/api/layout', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newLayout)
-      });
-      const updated = await res.json();
-      setLayout(updated);
+      await setDoc(doc(db, 'layout', 'settings'), newLayout);
       showNotification('Layout salvo com sucesso!', 'success');
     } catch (err) {
-      console.error('Error saving layout:', err);
+      handleFirestoreError(err, OperationType.WRITE, 'layout/settings');
       showNotification('Erro ao salvar o layout.', 'error');
     }
   };
@@ -715,38 +786,28 @@ export default function App() {
   );
 
   const AdminLogin = () => {
-    const [pass, setPass] = useState('');
-    const handleLogin = (e: React.FormEvent) => {
-      e.preventDefault();
-      if (pass === 'RequeMKT') setView('admin-dashboard');
-      else showNotification('Senha incorreta (Dica: RequeMKT)', 'error');
-    };
     return (
       <div className="min-h-screen bg-reque-primary flex items-center justify-center p-6">
         <div className="bg-white p-12 rounded-[40px] w-full max-w-md shadow-2xl">
-          <div className="text-center mb-8">
+          <div className="text-center mb-12">
             <div className="bg-reque-accent w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Shield className="w-8 h-8 text-reque-primary" />
             </div>
             <h2 className="text-3xl font-bold">Área Restrita</h2>
             <p className="text-gray-400 text-sm mt-2">Acesso exclusivo para equipe Reque</p>
           </div>
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-gray-400 ml-1">Senha de Acesso</label>
-              <input 
-                autoFocus
-                type="password" 
-                value={pass}
-                onChange={e => setPass(e.target.value)}
-                className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-reque-accent transition-all" 
-                placeholder="••••••••"
-              />
-            </div>
-            <button className="w-full bg-reque-primary text-white py-4 rounded-2xl font-bold hover:bg-reque-secondary transition-all">
-              Entrar no Dashboard
+          
+          <div className="space-y-6">
+            <button 
+              onClick={handleAdminLogin}
+              className="w-full bg-reque-primary text-white py-4 rounded-2xl font-bold hover:bg-reque-secondary transition-all flex items-center justify-center gap-3 shadow-xl"
+            >
+              <LogIn className="w-5 h-5" /> Entrar com Google
             </button>
-          </form>
+            <p className="text-[10px] text-center text-gray-400 uppercase tracking-widest">
+              Apenas e-mails autorizados têm acesso ao painel
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -1027,6 +1088,28 @@ export default function App() {
   };
 
   const AdminDashboard = () => {
+    if (!isAdmin) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+          <div className="bg-white p-12 rounded-[40px] w-full max-w-md shadow-2xl text-center">
+            <div className="bg-rose-100 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <EyeOff className="w-8 h-8 text-rose-600" />
+            </div>
+            <h2 className="text-3xl font-bold mb-4">Acesso Negado</h2>
+            <p className="text-gray-500 mb-8">
+              Seu e-mail <strong>{user?.email}</strong> não possui permissões administrativas.
+            </p>
+            <button 
+              onClick={handleAdminLogout}
+              className="w-full bg-reque-primary text-white py-4 rounded-2xl font-bold hover:bg-reque-secondary transition-all"
+            >
+              Voltar ao Início
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-gray-50 p-6 md:p-12">
         <div className="max-w-7xl mx-auto">
@@ -1948,10 +2031,12 @@ export default function App() {
           if (view === 'public') setView('admin-login');
           else setView('public');
         }} 
+        onLogout={handleAdminLogout}
+        user={user}
       />
       
       <main>
-        {loading ? (
+        {authLoading || (loading && view === 'public') ? (
           <div className="min-h-screen flex items-center justify-center">
             <div className="w-12 h-12 border-4 border-reque-accent border-t-transparent rounded-full animate-spin" />
           </div>

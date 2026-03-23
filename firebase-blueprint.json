@@ -1,0 +1,145 @@
+{
+  "entities": {
+    "Campaign": {
+      "title": "Campaign",
+      "description": "A marketing or service campaign offered by Reque SST.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "month": { "type": "string" },
+        "description": { "type": "string" },
+        "benefits": { "type": "array", "items": { "type": "string" } },
+        "category": { "type": "string", "enum": ["Calendário", "Complementar"] },
+        "active": { "type": "boolean" },
+        "imageUrl": { "type": "string" },
+        "price": { "type": "number" }
+      },
+      "required": ["id", "name", "description", "category", "active", "imageUrl"]
+    },
+    "LeadRequest": {
+      "title": "LeadRequest",
+      "description": "A request for a quote from a potential client.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyName": { "type": "string" },
+        "responsible": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "employeeCount": { "type": "number" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "notes": { "type": "string" },
+        "selectedCampaigns": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["Novo", "Em análise", "Orçamento enviado", "Fechado"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "budget": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "campaignId": { "type": "string" },
+                  "value": { "type": "number" },
+                  "description": { "type": "string" }
+                }
+              }
+            },
+            "extras": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "description": { "type": "string" },
+                  "value": { "type": "number" }
+                }
+              }
+            },
+            "discount": { "type": "number" },
+            "proposal": { "type": "string" }
+          }
+        }
+      },
+      "required": ["id", "companyName", "responsible", "phone", "email", "status", "createdAt"]
+    },
+    "Layout": {
+      "title": "Layout",
+      "description": "Site configuration and layout settings.",
+      "type": "object",
+      "properties": {
+        "hero": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "subtitle": { "type": "string" },
+            "buttonText": { "type": "string" },
+            "imageUrl": { "type": "string" }
+          }
+        },
+        "colors": {
+          "type": "object",
+          "properties": {
+            "primary": { "type": "string" },
+            "accent": { "type": "string" },
+            "dark": { "type": "string" },
+            "footerBg": { "type": "string" }
+          }
+        },
+        "catalog": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "subtitle": { "type": "string" },
+            "buttonText": { "type": "string" },
+            "buttonSelectedText": { "type": "string" }
+          }
+        },
+        "footer": {
+          "type": "object",
+          "properties": {
+            "email": { "type": "string" },
+            "phone": { "type": "string" },
+            "address": { "type": "string" },
+            "facebook": { "type": "string" },
+            "instagram": { "type": "string" },
+            "linkedin": { "type": "string" },
+            "whatsapp": { "type": "string" }
+          }
+        }
+      }
+    },
+    "User": {
+      "title": "User",
+      "description": "Application user with roles.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "displayName": { "type": "string" }
+      },
+      "required": ["uid", "email", "role"]
+    }
+  },
+  "firestore": {
+    "/campaigns/{campaignId}": {
+      "schema": "Campaign",
+      "description": "Collection of available campaigns."
+    },
+    "/requests/{requestId}": {
+      "schema": "LeadRequest",
+      "description": "Collection of lead requests."
+    },
+    "/layout/settings": {
+      "schema": "Layout",
+      "description": "Singleton document for site layout settings."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of users and their roles."
+    }
+  }
+}
