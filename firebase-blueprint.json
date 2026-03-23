@@ -119,6 +119,7 @@
         "uid": { "type": "string" },
         "email": { "type": "string" },
         "role": { "type": "string", "enum": ["admin", "user"] },
+        "isSuperAdmin": { "type": "boolean" },
         "displayName": { "type": "string" }
       },
       "required": ["uid", "email", "role"]

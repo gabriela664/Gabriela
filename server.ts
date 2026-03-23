@@ -2,13 +2,25 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-
 import fs from "fs";
+import cookieParser from "cookie-parser";
+import admin from "firebase-admin";
+import firebaseConfig from "./firebase-applet-config.json" assert { type: "json" };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DATA_FILE = path.join(__dirname, "data.json");
+// Initialize Firebase Admin
+if (!admin.apps.length) {
+  admin.initializeApp({
+    projectId: firebaseConfig.projectId,
+  });
+}
+
+const db = admin.firestore();
+if (firebaseConfig.firestoreDatabaseId) {
+  db.settings({ databaseId: firebaseConfig.firestoreDatabaseId });
+}
 
 const DEFAULT_LAYOUT = {
   hero: {
@@ -40,179 +52,179 @@ const DEFAULT_LAYOUT = {
   }
 };
 
-// Initial Data Helper
-function loadData() {
-  if (fs.existsSync(DATA_FILE)) {
-    const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
-    return {
-      campaigns: data.campaigns || [],
-      requests: data.requests || [],
-      layout: {
-        ...DEFAULT_LAYOUT,
-        ...data.layout,
-        hero: { ...DEFAULT_LAYOUT.hero, ...data.layout?.hero },
-        colors: { ...DEFAULT_LAYOUT.colors, ...data.layout?.colors },
-        catalog: { ...DEFAULT_LAYOUT.catalog, ...data.layout?.catalog },
-        footer: { ...DEFAULT_LAYOUT.footer, ...data.layout?.footer }
-      }
-    };
-  }
-  return {
-    campaigns: [
-      {
-        id: 'janeiro-branco',
-        name: 'Janeiro Branco',
-        month: 'Janeiro',
-        description: 'Foco na saúde mental e bem-estar emocional dos colaboradores.',
-        benefits: ['Redução do absenteísmo', 'Melhora do clima organizacional', 'Prevenção de transtornos mentais'],
-        category: 'Calendário',
-        active: true,
-        imageUrl: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?q=80&w=800&auto=format&fit=crop'
-      },
-      {
-        id: 'abril-verde',
-        name: 'Abril Verde',
-        month: 'Abril',
-        description: 'Conscientização sobre segurança e saúde no trabalho.',
-        benefits: ['Redução de acidentes', 'Conformidade legal', 'Cultura de prevenção'],
-        category: 'Calendário',
-        active: true,
-        imageUrl: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?q=80&w=800&auto=format&fit=crop'
-      },
-      {
-        id: 'sipat',
-        name: 'SIPAT',
-        month: 'Variável',
-        description: 'Semana Interna de Prevenção de Acidentes do Trabalho.',
-        benefits: ['Engajamento da CIPA', 'Treinamentos práticos', 'Integração da equipe'],
-        category: 'Calendário',
-        active: true,
-        imageUrl: 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?q=80&w=800&auto=format&fit=crop'
-      },
-      {
-        id: 'setembro-amarelo',
-        name: 'Setembro Amarelo',
-        month: 'Setembro',
-        description: 'Prevenção ao suicídio e valorização da vida.',
-        benefits: ['Apoio psicológico', 'Quebra de tabus', 'Ambiente acolhedor'],
-        category: 'Calendário',
-        active: true,
-        imageUrl: 'https://images.unsplash.com/photo-1499209974431-9dac3adaf471?q=80&w=800&auto=format&fit=crop'
-      },
-      {
-        id: 'outubro-rosa',
-        name: 'Outubro Rosa',
-        month: 'Outubro',
-        description: 'Conscientização sobre o câncer de mama.',
-        benefits: ['Saúde da mulher', 'Diagnóstico precoce', 'Responsabilidade social'],
-        category: 'Calendário',
-        active: true,
-        imageUrl: 'https://images.unsplash.com/photo-1516589174184-c68526673fd6?q=80&w=800&auto=format&fit=crop'
-      },
-      {
-        id: 'novembro-azul',
-        name: 'Novembro Azul',
-        month: 'Novembro',
-        description: 'Conscientização sobre o câncer de próstata e saúde do homem.',
-        benefits: ['Saúde do homem', 'Prevenção', 'Check-ups regulares'],
-        category: 'Calendário',
-        active: true,
-        imageUrl: 'https://images.unsplash.com/photo-1503945438517-f65904a52ce6?q=80&w=800&auto=format&fit=crop'
-      },
-      {
-        id: 'dezembro-vermelho',
-        name: 'Dezembro Vermelho',
-        month: 'Dezembro',
-        description: 'Mobilização nacional na luta contra o HIV/AIDS e outras ISTs.',
-        benefits: ['Informação correta', 'Prevenção', 'Redução de preconceitos'],
-        category: 'Calendário',
-        active: true,
-        imageUrl: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=800&auto=format&fit=crop'
-      },
-      {
-        id: 'saude-mental-nr1',
-        name: 'Saúde Mental e Fatores Psicossociais (NR-1)',
-        description: 'Gestão de riscos psicossociais conforme a nova NR-1.',
-        benefits: ['Gestão de Burnout', 'Prevenção de assédio', 'Melhora da produtividade'],
-        category: 'Complementar',
-        active: true,
-        imageUrl: 'https://images.unsplash.com/photo-1527137342181-19aab11a8ee1?q=80&w=800&auto=format&fit=crop'
-      }
-    ],
-    requests: [],
-    layout: DEFAULT_LAYOUT
-  };
-}
-
-let { campaigns, requests, layout } = loadData();
-
-function saveData() {
-  fs.writeFileSync(DATA_FILE, JSON.stringify({ campaigns, requests, layout }, null, 2));
-}
-
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
+  app.use(cookieParser());
+
+  // Auth Middleware
+  const authMiddleware = (req: any, res: any, next: any) => {
+    const session = req.cookies.reque_session;
+    if (session === "authorized") {
+      next();
+    } else {
+      res.status(401).json({ error: "Unauthorized" });
+    }
+  };
 
   // API Routes
-  app.get("/api/campaigns", (req, res) => {
-    res.json(campaigns);
+  app.post("/api/auth/login", (req, res) => {
+    const { email, password } = req.body;
+    if (email?.toLowerCase() === "gabriela@reque.com.br" && password === "RequeMKT") {
+      res.cookie("reque_session", "authorized", { 
+        httpOnly: true, 
+        secure: true, 
+        sameSite: "none",
+        maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+      });
+      res.json({ success: true, user: { email: "gabriela@reque.com.br", role: "admin", isSuperAdmin: true } });
+    } else {
+      res.status(401).json({ error: "Credenciais inválidas" });
+    }
   });
 
-  app.get("/api/layout", (req, res) => {
-    res.json(layout);
+  app.get("/api/auth/check", (req, res) => {
+    const session = req.cookies.reque_session;
+    if (session === "authorized") {
+      res.json({ authenticated: true, user: { email: "gabriela@reque.com.br", role: "admin", isSuperAdmin: true } });
+    } else {
+      res.json({ authenticated: false });
+    }
   });
 
-  app.put("/api/layout", (req, res) => {
-    layout = { ...layout, ...req.body };
-    saveData();
-    res.json(layout);
+  app.post("/api/auth/logout", (req, res) => {
+    res.clearCookie("reque_session");
+    res.json({ success: true });
   });
 
-  app.post("/api/campaigns", (req, res) => {
-    const newCampaign = { ...req.body, id: Math.random().toString(36).substr(2, 9) };
-    campaigns.push(newCampaign);
-    saveData();
-    res.json(newCampaign);
+  app.get("/api/campaigns", async (req, res) => {
+    try {
+      const snapshot = await db.collection("campaigns").get();
+      const campaigns = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      res.json(campaigns);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch campaigns" });
+    }
   });
 
-  app.put("/api/campaigns/:id", (req, res) => {
-    const { id } = req.params;
-    campaigns = campaigns.map(c => c.id === id ? { ...c, ...req.body } : c);
-    saveData();
-    res.json(campaigns.find(c => c.id === id));
+  app.get("/api/layout", async (req, res) => {
+    try {
+      const doc = await db.collection("layout").doc("settings").get();
+      if (doc.exists) {
+        res.json(doc.data());
+      } else {
+        res.json(DEFAULT_LAYOUT);
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch layout" });
+    }
   });
 
-  app.delete("/api/campaigns/:id", (req, res) => {
-    const { id } = req.params;
-    campaigns = campaigns.filter(c => c.id !== id);
-    saveData();
-    res.sendStatus(204);
+  app.put("/api/layout", authMiddleware, async (req, res) => {
+    try {
+      await db.collection("layout").doc("settings").set(req.body, { merge: true });
+      res.json(req.body);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update layout" });
+    }
   });
 
-  app.get("/api/requests", (req, res) => {
-    res.json(requests);
+  app.post("/api/campaigns", authMiddleware, async (req, res) => {
+    try {
+      const docRef = await db.collection("campaigns").add(req.body);
+      res.json({ ...req.body, id: docRef.id });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create campaign" });
+    }
   });
 
-  app.post("/api/requests", (req, res) => {
-    const newRequest = { 
-      ...req.body, 
-      id: Math.random().toString(36).substr(2, 9),
-      createdAt: new Date().toISOString(),
-      status: 'Novo'
-    };
-    requests.unshift(newRequest);
-    saveData();
-    res.json(newRequest);
+  app.put("/api/campaigns/:id", authMiddleware, async (req, res) => {
+    try {
+      await db.collection("campaigns").doc(req.params.id).set(req.body, { merge: true });
+      res.json({ ...req.body, id: req.params.id });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update campaign" });
+    }
   });
 
-  app.put("/api/requests/:id", (req, res) => {
-    const { id } = req.params;
-    requests = requests.map(r => r.id === id ? { ...r, ...req.body } : r);
-    saveData();
-    res.json(requests.find(r => r.id === id));
+  app.delete("/api/campaigns/:id", authMiddleware, async (req, res) => {
+    try {
+      await db.collection("campaigns").doc(req.params.id).delete();
+      res.sendStatus(204);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete campaign" });
+    }
+  });
+
+  app.get("/api/requests", authMiddleware, async (req, res) => {
+    try {
+      const snapshot = await db.collection("requests").orderBy("createdAt", "desc").get();
+      const requests = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      res.json(requests);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch requests" });
+    }
+  });
+
+  app.post("/api/requests", async (req, res) => {
+    try {
+      const newRequest = { 
+        ...req.body, 
+        createdAt: new Date().toISOString(),
+        status: 'Novo'
+      };
+      const docRef = await db.collection("requests").add(newRequest);
+      res.json({ ...newRequest, id: docRef.id });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create request" });
+    }
+  });
+
+  app.put("/api/requests/:id", authMiddleware, async (req, res) => {
+    try {
+      await db.collection("requests").doc(req.params.id).set(req.body, { merge: true });
+      res.json({ ...req.body, id: req.params.id });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update request" });
+    }
+  });
+
+  app.get("/api/users", authMiddleware, async (req: any, res: any) => {
+    try {
+      const snapshot = await db.collection("users").orderBy("email").get();
+      const users = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  app.post("/api/users", authMiddleware, async (req: any, res: any) => {
+    try {
+      const { email, password, role } = req.body;
+      const emailLower = email.toLowerCase();
+      const userData = {
+        email: emailLower,
+        password,
+        role: role || 'admin',
+        createdAt: new Date().toISOString()
+      };
+      await db.collection("users").doc(emailLower).set(userData);
+      res.json(userData);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create user" });
+    }
+  });
+
+  app.delete("/api/users/:id", authMiddleware, async (req: any, res: any) => {
+    try {
+      await db.collection("users").doc(req.params.id).delete();
+      res.sendStatus(204);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete user" });
+    }
   });
 
   // Vite middleware for development
