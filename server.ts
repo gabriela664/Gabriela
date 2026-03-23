@@ -10,12 +10,25 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load Firebase Config manually to avoid ESM issues
-const configPath = path.join(__dirname, "firebase-applet-config.json");
-const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+let firebaseConfig: any = {};
+try {
+  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(configPath)) {
+    firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+  } else {
+    // Fallback to environment variables if JSON is missing (Standard for Vercel/Production)
+    firebaseConfig = {
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      firestoreDatabaseId: process.env.FIREBASE_DATABASE_ID
+    };
+  }
+} catch (error) {
+  console.error("Error loading Firebase config:", error);
+}
 
 // Initialize Firebase Admin
 try {
-  if (!admin.apps.length) {
+  if (!admin.apps.length && firebaseConfig.projectId) {
     admin.initializeApp({
       projectId: firebaseConfig.projectId,
     });
