@@ -242,12 +242,12 @@ export default function App() {
         showNotification('Login realizado com sucesso!', 'success');
         refreshData();
       } else {
-        const error = await res.json();
-        showNotification(error.error || 'Credenciais inválidas', 'error');
+        const errorData = await res.json().catch(() => ({ error: 'Erro desconhecido no servidor' }));
+        showNotification(errorData.error || 'Credenciais inválidas', 'error');
       }
     } catch (error: any) {
       console.error('Erro ao fazer login:', error);
-      showNotification('Erro ao validar acesso. Verifique sua conexão.', 'error');
+      showNotification(`Erro de conexão: ${error.message || 'Verifique sua internet'}`, 'error');
     }
   };
 
@@ -288,6 +288,8 @@ export default function App() {
           } else {
             setIsAdmin(false);
             setUser(null);
+            // Only redirect if we were in the dashboard
+            if (view === 'admin-dashboard') setView('admin-login');
           }
         }
       } catch (error) {

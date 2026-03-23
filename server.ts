@@ -91,6 +91,15 @@ async function startServer() {
   };
 
   // API Routes
+  app.get("/api/health", (req, res) => {
+    res.json({ 
+      status: "ok", 
+      firebaseInitialized: !!admin.apps.length,
+      projectId: firebaseConfig.projectId || "missing",
+      databaseId: firebaseConfig.firestoreDatabaseId || "missing"
+    });
+  });
+
   app.post("/api/auth/login", async (req, res) => {
     const { email, password } = req.body;
     const emailLower = email?.toLowerCase();
