@@ -5,16 +5,24 @@ import { fileURLToPath } from "url";
 import fs from "fs";
 import cookieParser from "cookie-parser";
 import admin from "firebase-admin";
-import firebaseConfig from "./firebase-applet-config.json" assert { type: "json" };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load Firebase Config manually to avoid ESM issues
+const configPath = path.join(__dirname, "firebase-applet-config.json");
+const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+
 // Initialize Firebase Admin
-if (!admin.apps.length) {
-  admin.initializeApp({
-    projectId: firebaseConfig.projectId,
-  });
+try {
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      projectId: firebaseConfig.projectId,
+    });
+    console.log("Firebase Admin initialized successfully");
+  }
+} catch (error) {
+  console.error("Error initializing Firebase Admin:", error);
 }
 
 const db = admin.firestore();
