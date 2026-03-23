@@ -70,18 +70,50 @@ async function startServer() {
   };
 
   // API Routes
-  app.post("/api/auth/login", (req, res) => {
+  app.post("/api/auth/login", async (req, res) => {
     const { email, password } = req.body;
-    if (email?.toLowerCase() === "gabriela@reque.com.br" && password === "RequeMKT") {
+    const emailLower = email?.toLowerCase();
+    
+    if (emailLower === "gabriela@reque.com.br" && password === "RequeMKT") {
+      // Ensure user exists in Firestore for other parts of the app
+      try {
+        await db.collection("users").doc(emailLower).set({
+          email: emailLower,
+          role: "admin",
+          isSuperAdmin: true,
+          displayName: "Gabriela Reque",
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (e) {
+        console.error("Error syncing super admin to firestore:", e);
+      }
+
       res.cookie("reque_session", "authorized", { 
         httpOnly: true, 
         secure: true, 
-        sameSite: "none",
+        sameSite: "none", // Required for AI Studio Iframe
         maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
       });
-      res.json({ success: true, user: { email: "gabriela@reque.com.br", role: "admin", isSuperAdmin: true } });
+      res.json({ success: true, user: { email: emailLower, role: "admin", isSuperAdmin: true } });
     } else {
-      res.status(401).json({ error: "Credenciais inválidas" });
+      // Check other users
+      try {
+        const userDoc = await db.collection("users").doc(emailLower || "none").get();
+        const userData = userDoc.data();
+        if (userDoc.exists && userData?.password === password && userData?.role === "admin") {
+          res.cookie("reque_session", "authorized", { 
+            httpOnly: true, 
+            secure: true, 
+            sameSite: "none",
+            maxAge: 30 * 24 * 60 * 60 * 1000
+          });
+          res.json({ success: true, user: userData });
+        } else {
+          res.status(401).json({ error: "Credenciais inválidas" });
+        }
+      } catch (e) {
+        res.status(401).json({ error: "Erro na autenticação" });
+      }
     }
   });
 
